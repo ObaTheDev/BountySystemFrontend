@@ -12,16 +12,31 @@ export default function AdminDisputesPage() {
     const [successMsg, setSuccessMsg] = useState("");
     const [adminNotes, setAdminNotes] = useState({});
     const [expandedId, setExpandedId] = useState(null);
+    const [debugRes, setDebugRes] = useState("");
 
     const fetchTasks = async () => {
         try {
             // Use the admin dispute viewset, as standard /tasks/ blocks non-students
             const res = await apiCall('/admin/disputes/');
+            setDebugRes(JSON.stringify(res, null, 2));
+
             const rawData = Array.isArray(res) ? res : 
                             (Array.isArray(res.data) ? res.data : 
                             (res.data?.results || res.results || []));
-            // Assume the backend already filters, but if not we keep our filter
-            setTasks(rawData.filter(t => t.status === 'disputed' || t.status === 'in_review'));
+            
+            // Map the objects properly in case the endpoint returns dispute/assignment objects with nested task_details
+            const normalizedTasks = rawData.map(item => {
+                // If the item itself has a title, it's a task object
+                if (item.title) return item;
+                // If it has task_details, extract the task data but keep the dispute ID
+                if (item.task_details) return { ...item.task_details, dispute_id: item.id };
+                // If it has task, extract it
+                if (item.task) return { ...item.task, dispute_id: item.id };
+                return item;
+            });
+
+            // The backend /admin/disputes/ endpoint already filters by disputed items.
+            setTasks(normalizedTasks);
             setError("");
         } catch (err) {
             setError(err.message || "Failed to load disputed tasks");
@@ -84,9 +99,13 @@ export default function AdminDisputesPage() {
                         <Scale size={48} />
                     </div>
                     <h3 className="text-xl font-bold text-slate-800 mb-2">No Active Disputes</h3>
-                    <p className="text-slate-500 max-w-sm mx-auto leading-relaxed">
+                    <p className="text-slate-500 max-w-sm mx-auto leading-relaxed mb-4">
                         The platform is running smoothly. There are no tasks requiring administrative arbitration at the moment.
                     </p>
+                    <div className="w-full mt-4 h-48 overflow-auto bg-slate-900 rounded text-left p-4">
+                        <p className="text-green-400 font-bold mb-2">DEBUG - API Response (/admin/disputes/):</p>
+                        <pre className="text-xs text-white break-all whitespace-pre-wrap">{debugRes || "Nothing returned"}</pre>
+                    </div>
                 </div>
             ) : (
                 <div className="flex flex-col gap-5 mt-2">
@@ -130,7 +149,7 @@ export default function AdminDisputesPage() {
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <button
                                             disabled={isAnyLoading}
-                                            onClick={() => handleResolve(task.id, 'department')}
+                                            onClick={() => handleResolve(task.dispute_id || task.id, 'department')}
                                             className="flex w-full items-center justify-center gap-2 border-2 border-red-200 bg-red-50 text-red-600 font-bold py-3.5 rounded-2xl transition-all hover:bg-red-500 hover:text-white hover:border-red-500 active:scale-95 disabled:opacity-50"
                                         >
                                             {isLoadingDept ? <Loader2 size={18} className="animate-spin" /> : "Refund Department"}
@@ -138,7 +157,7 @@ export default function AdminDisputesPage() {
 
                                         <button
                                             disabled={isAnyLoading}
-                                            onClick={() => handleResolve(task.id, 'student')}
+                                            onClick={() => handleResolve(task.dispute_id || task.id, 'student')}
                                             className="flex w-full items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3.5 rounded-2xl transition-all shadow-lg shadow-emerald-500/20 active:scale-95 disabled:opacity-50"
                                         >
                                             {isLoadingStudent ? <Loader2 size={18} className="animate-spin" /> : "Pay Student"}
