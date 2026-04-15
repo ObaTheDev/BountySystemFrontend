@@ -66,11 +66,17 @@ export default function TaskManagementPage() {
     };
 
     const handleRaiseDispute = async () => {
-        if (!confirm("Are you sure you want to raise a dispute? An admin will review it.")) return;
+        const reason = prompt("Please enter the reason for the dispute. An admin will review it.");
+        if (!reason || !reason.trim()) {
+            if (reason !== null) {
+                alert("Reason for dispute is required.");
+            }
+            return;
+        }
         setActionLoading(true);
         setError("");
         try {
-            await raiseDispute(id);
+            await raiseDispute(id, reason.trim());
             setSuccessMsg("Dispute raised. An admin will review this task.");
             fetchData();
         } catch (err) {

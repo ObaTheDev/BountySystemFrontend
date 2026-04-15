@@ -197,16 +197,19 @@ export const confirmTask = async (id) => {
  * Access: Student or Task Poster (Department)
  * api_reference: POST /tasks/<id>/raise-dispute/
  */
-export const raiseDispute = async (id) => {
-    return await apiCall(`/tasks/${id}/raise-dispute/`, { method: 'POST' });
+export const raiseDispute = async (id, reason) => {
+    return await apiCall(`/tasks/${id}/raise-dispute/`, {
+        method: 'POST',
+        body: JSON.stringify({ reason })
+    });
 }
 
 /**
  * Legacy alias kept for backward compatibility — prefer raiseDispute().
  * The old endpoint /tasks/<id>/dispute/ is superseded by the hybrid dispute system.
  */
-export const disputeTask = async (id) => {
-    return raiseDispute(id);
+export const disputeTask = async (id, reason) => {
+    return raiseDispute(id, reason);
 }
 
 /**
