@@ -17,7 +17,9 @@ export default function AdminDisputesPage() {
         try {
             // Use the admin dispute viewset, as standard /tasks/ blocks non-students
             const res = await apiCall('/admin/disputes/');
-            const rawData = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+            const rawData = Array.isArray(res) ? res : 
+                            (Array.isArray(res.data) ? res.data : 
+                            (res.data?.results || res.results || []));
             // Assume the backend already filters, but if not we keep our filter
             setTasks(rawData.filter(t => t.status === 'disputed' || t.status === 'in_review'));
             setError("");
