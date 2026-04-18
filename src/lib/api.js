@@ -184,8 +184,17 @@ export const acceptTask = async (id) => {
     return await apiCall(`/tasks/${id}/accept/`, { method: 'POST' });
 }
 
-export const submitTask = async (id) => {
-    return await apiCall(`/tasks/${id}/submit/`, { method: 'POST' });
+/**
+ * Submit a task with optional text notes.
+ * @param {number|string} id - Task ID
+ * @param {null} _image - Ignored (reserved for future use)
+ * @param {string} notes - Optional submission notes
+ */
+export const submitTask = async (id, _image = null, notes = '') => {
+    return await apiCall(`/tasks/${id}/submit/`, {
+        method: 'POST',
+        body: JSON.stringify({ submission_notes: notes.trim() || undefined })
+    });
 }
 
 export const confirmTask = async (id) => {
@@ -222,6 +231,24 @@ export const respondToDispute = async (disputeId, deptResponse) => {
         method: 'POST',
         body: JSON.stringify({ dept_response: deptResponse })
     });
+}
+
+/**
+ * List disputes visible to the authenticated user.
+ * Student  → their own disputes
+ * Dept     → disputes for tasks they posted
+ * Admin    → all disputes (prefer getAdminDisputes)
+ */
+export const getDisputes = async () => {
+    return await apiCall('/tasks/disputes/');
+}
+
+/**
+ * List ALL disputes (Admin only).
+ * api_reference: GET /admin/disputes/
+ */
+export const getAdminDisputes = async () => {
+    return await apiCall('/admin/disputes/');
 }
 
 // ─── Wallet ──────────────────────────────────────────────────────────────────

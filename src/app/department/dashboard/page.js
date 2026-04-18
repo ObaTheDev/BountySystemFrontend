@@ -1,24 +1,34 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Search, PlusCircle, CheckCircle, Clock, Loader2, Bell } from "lucide-react";
+import { PlusCircle, CheckCircle, Clock, Loader2, Bell, Scale, ChevronRight, AlertTriangle } from "lucide-react";
 import Link from "next/link";
-import { getProfile, getDeptTasks } from "@/lib/api";
+import { getProfile, getDeptTasks, getDisputes } from "@/lib/api";
 
 export default function DepartmentDashboard() {
     const [profile, setProfile] = useState(null);
     const [tasks, setTasks] = useState([]);
+    const [resolvedDisputes, setResolvedDisputes] = useState([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [profRes, tasksRes] = await Promise.all([
+                const [profRes, tasksRes, disputeRes] = await Promise.all([
                     getProfile(),
-                    getDeptTasks()
+                    getDeptTasks(),
+                    getDisputes().catch(() => null),
                 ]);
                 setProfile(profRes.data);
                 const taskData = tasksRes.data || tasksRes.results || [];
                 setTasks(Array.isArray(taskData) ? taskData : (taskData.results || []));
+
+                if (disputeRes) {
+                    const dList = Array.isArray(disputeRes.data) ? disputeRes.data :
+                        Array.isArray(disputeRes.results) ? disputeRes.results :
+                            Array.isArray(disputeRes) ? disputeRes : [];
+                    // Only show resolved disputes — pending/in_review are shown on the task page
+                    setResolvedDisputes(dList.filter(d => d.status === 'resolved'));
+                }
             } catch (err) {
                 console.error("Dashboard error:", err);
             } finally {
@@ -64,6 +74,70 @@ export default function DepartmentDashboard() {
                     </div>
                 </div>
             </div>
+
+            {/* Resolved Dispute Outcomes */}
+            {resolvedDisputes.length > 0 && (
+                <div className="flex flex-col gap-3">
+                    <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <Scale size={20} className="text-secondary" />
+                        Dispute Outcomes
+                    </h2>
+                    {resolvedDisputes.map((dispute) => {
+                        const deptWon = dispute.resolution_decision === 'department';
+                        const taskDetails = dispute.task_details || dispute.task || {};
+                        const taskId = taskDetails.id || dispute.task_id ||
+                            (typeof dispute.task === 'number' ? dispute.task : null);
+                        const taskTitle = dispute.task_title || taskDetails.title || 'Task';
+                        const rewardAmount = taskDetails.reward_amount || dispute.reward_amount || 0;
+
+                        return (
+                            <div
+                                key={dispute.id}
+                                className={`rounded-2xl p-4 border-2 flex items-start gap-3 ${
+                                    deptWon
+                                        ? 'bg-emerald-50 border-emerald-200'
+                                        : 'bg-orange-50 border-orange-200'
+                                }`}
+                            >
+                                <div className={`p-2 rounded-full flex-shrink-0 mt-0.5 ${
+                                    deptWon ? 'bg-emerald-100 text-emerald-600' : 'bg-orange-100 text-orange-500'
+                                }`}>
+                                    {deptWon ? <CheckCircle size={18} /> : <AlertTriangle size={18} />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className={`text-sm font-black uppercase tracking-wide ${
+                                        deptWon ? 'text-emerald-700' : 'text-orange-700'
+                                    }`}>
+                                        {deptWon
+                                            ? '✅ Dispute Resolved — Dept. Favoured'
+                                            : '⚠️ Dispute Resolved — Student Paid'}
+                                    </p>
+                                    <p className="text-xs font-semibold text-slate-600 mt-1 truncate">{taskTitle}</p>
+                                    <p className={`text-xs mt-1 leading-relaxed ${
+                                        deptWon ? 'text-emerald-600' : 'text-orange-600'
+                                    }`}>
+                                        {deptWon
+                                            ? 'Admin ruled in your favour. The task was cancelled — no payment made.'
+                                            : `Admin ruled in favour of the student. ₦${Number(rewardAmount).toLocaleString()} was paid out.`}
+                                    </p>
+                                </div>
+                                {taskId && (
+                                    <Link
+                                        href={`/department/tasks/${taskId}`}
+                                        className={`flex-shrink-0 self-center p-1.5 rounded-full transition-colors ${
+                                            deptWon
+                                                ? 'text-emerald-500 hover:bg-emerald-100'
+                                                : 'text-orange-500 hover:bg-orange-100'
+                                        }`}
+                                    >
+                                        <ChevronRight size={18} />
+                                    </Link>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
 
             {/* Quick Actions */}
             <div>

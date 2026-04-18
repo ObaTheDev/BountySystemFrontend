@@ -2,17 +2,18 @@
 import { useEffect, useState } from "react";
 import {
     ArrowLeft, User, Calendar, CheckSquare, Loader2,
-    AlertTriangle, CheckCircle, Building, Phone, Hash,
-    GraduationCap, MessageSquare, Send
+    AlertTriangle, CheckCircle, Phone, Hash,
+    GraduationCap, MessageSquare, Send, FileText
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { getTaskDetails, confirmTask, raiseDispute, respondToDispute, getDepartmentAssignments } from "@/lib/api";
+import { getTaskDetails, confirmTask, raiseDispute, respondToDispute, getDepartmentAssignments, apiCall } from "@/lib/api";
 
 export default function TaskManagementPage() {
     const { id } = useParams();
     const [task, setTask] = useState(null);
     const [assignment, setAssignment] = useState(null);
+    const [taskDispute, setTaskDispute] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [actionLoading, setActionLoading] = useState(false);
@@ -39,6 +40,19 @@ export default function TaskManagementPage() {
             } catch (assignErr) {
                 console.error("Failed to fetch assignments:", assignErr);
             }
+
+            // Fetch any dispute for this task to show outcome after resolution
+            try {
+                const dRes = await apiCall(`/tasks/disputes/?task=${id}`);
+                const dList = Array.isArray(dRes.data) ? dRes.data :
+                    Array.isArray(dRes.results) ? dRes.results :
+                        Array.isArray(dRes) ? dRes : [];
+                // Prefer resolved dispute; fall back to most recent
+                const resolved = dList.find(d => d.status === 'resolved') || dList[0] || null;
+                setTaskDispute(resolved);
+            } catch (dErr) {
+                console.error("Could not fetch dispute info:", dErr);
+            }
         } catch (err) {
             setError(`Failed to load task details. ${err.message}`);
         } finally {
@@ -48,6 +62,7 @@ export default function TaskManagementPage() {
 
     useEffect(() => {
         if (id) fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]);
 
     const handleConfirm = async () => {
@@ -68,9 +83,7 @@ export default function TaskManagementPage() {
     const handleRaiseDispute = async () => {
         const reason = prompt("Please enter the reason for the dispute. An admin will review it.");
         if (!reason || !reason.trim()) {
-            if (reason !== null) {
-                alert("Reason for dispute is required.");
-            }
+            if (reason !== null) alert("Reason for dispute is required.");
             return;
         }
         setActionLoading(true);
@@ -86,15 +99,41 @@ export default function TaskManagementPage() {
         }
     };
 
+    /**
+     * The respond endpoint is POST /tasks/disputes/<dispute_id>/respond/
+     * We need the dispute object's ID, not the task ID.
+     * We fetch it from /tasks/disputes/?task=<id> as a fallback when the assignment
+     * doesn't have it baked in.
+     */
+    const getDisputeId = async () => {
+        // Prefer the baked-in dispute_id if the API returns it
+        if (assignment?.dispute_id) return assignment.dispute_id;
+        if (assignment?.dispute?.id) return assignment.dispute.id;
+
+        // Fallback: fetch from the disputes endpoint filtered by task
+        try {
+            const res = await apiCall(`/tasks/disputes/?task=${id}`);
+            const disputes = Array.isArray(res.data) ? res.data :
+                Array.isArray(res.results) ? res.results :
+                    Array.isArray(res) ? res : [];
+            const pending = disputes.find(d => d.status === 'pending' || d.status === 'in_review');
+            if (pending) return pending.id;
+        } catch (e) {
+            console.error("Could not resolve dispute ID:", e);
+        }
+        return null;
+    };
+
     const handleDisputeResponse = async (e) => {
         e.preventDefault();
         if (!deptResponse.trim()) return;
         setRespondingToDispute(true);
         setError("");
         try {
-            // assignment.id is the dispute/assignment id used by the respond endpoint
-            await respondToDispute(assignment?.id || id, deptResponse);
-            setSuccessMsg("Evidence submitted. Status moved to 'in review'. Admin will make the final call.");
+            const disputeId = await getDisputeId();
+            if (!disputeId) throw new Error("Could not locate the dispute record. Please refresh and try again.");
+            await respondToDispute(disputeId, deptResponse);
+            setSuccessMsg("Evidence submitted. Status moved to 'In Review'. Admin will make the final call.");
             setShowDisputeResponse(false);
             setDeptResponse("");
             fetchData();
@@ -122,6 +161,9 @@ export default function TaskManagementPage() {
     const studentMatric = assignment?.student_details?.matric_number || "";
     const studentLevel = assignment?.student_details?.level || "";
 
+    // Submission evidence (text only)
+    const submissionNotes = assignment?.submission_notes;
+
     return (
         <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
             <header className="flex flex-col gap-2 relative mb-2">
@@ -134,7 +176,12 @@ export default function TaskManagementPage() {
                 </Link>
                 <div className="flex justify-between items-end mt-4 px-1 gap-3">
                     <h1 className="text-xl sm:text-2xl font-bold text-slate-800 leading-tight flex-1">Manage Bounty</h1>
-                    <div className={`text-[10px] font-bold px-3 py-1.5 rounded-full uppercase shadow-sm flex-shrink-0 ${task.status === 'completed' || task.status === 'confirmed' ? 'bg-green-100 text-green-700' : task.status === 'disputed' ? 'bg-red-100 text-red-600' : 'bg-secondary/10 text-secondary'}`}>
+                    <div className={`text-[10px] font-bold px-3 py-1.5 rounded-full uppercase shadow-sm flex-shrink-0 ${
+                        task.status === 'completed' || task.status === 'confirmed' ? 'bg-green-100 text-green-700' :
+                        task.status === 'disputed' ? 'bg-red-100 text-red-600' :
+                        task.status === 'pending_confirmation' ? 'bg-amber-100 text-amber-700' :
+                        'bg-secondary/10 text-secondary'
+                    }`}>
                         {task.status.replace(/_/g, " ")}
                     </div>
                 </div>
@@ -171,7 +218,7 @@ export default function TaskManagementPage() {
             <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100">
                 <h2 className="text-xl sm:text-2xl font-bold text-slate-800 mb-3">{task.title}</h2>
 
-                {/* Meta row — wraps on small screens */}
+                {/* Meta row */}
                 <div className="flex flex-wrap gap-2 mb-4">
                     <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-full">
                         <Calendar size={13} />
@@ -182,8 +229,7 @@ export default function TaskManagementPage() {
                     </span>
                     {assignment && (
                         <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-full">
-                            <User size={13} />
-                            {studentName}
+                            <User size={13} /> {studentName}
                         </span>
                     )}
                 </div>
@@ -236,13 +282,23 @@ export default function TaskManagementPage() {
                 <div className="bg-amber-50 rounded-3xl p-6 shadow-sm border border-amber-200">
                     <div className="flex flex-col items-center text-center mb-6">
                         <div className="bg-white p-4 rounded-full shadow-sm mb-4">
-                            <span className="text-3xl">🎉</span>
+                            <CheckCircle size={32} className="text-amber-400" />
                         </div>
-                        <h3 className="text-xl font-bold text-slate-800 mb-1">{studentName} submitted the work!</h3>
-                        <p className="text-slate-600 text-sm">Please physically review their work. If it's satisfactory, confirm below to release payment.</p>
+                        <h3 className="text-xl font-bold text-slate-800 mb-1">{studentName} submitted their work!</h3>
+                        <p className="text-slate-600 text-sm">Review their submission below. If satisfactory, confirm to release payment.</p>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-3 mt-6">
+                    {/* ── Submission Evidence (text only) ── */}
+                    {submissionNotes && (
+                        <div className="bg-white rounded-2xl p-5 border border-amber-200 mb-6">
+                            <p className="text-xs font-bold text-amber-600 uppercase tracking-wide mb-2 flex items-center gap-1">
+                                <FileText size={12} /> Student Submission Notes
+                            </p>
+                            <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{submissionNotes}</p>
+                        </div>
+                    )}
+
+                    <div className="flex flex-col sm:flex-row gap-3 mt-2">
                         <button
                             onClick={handleRaiseDispute}
                             disabled={actionLoading}
@@ -261,7 +317,7 @@ export default function TaskManagementPage() {
                     </div>
                 </div>
 
-            ) : task.status === "disputed" ? (
+            ) : task.status === 'disputed' ? (
                 /* ── Hybrid Dispute System: Dept Evidence Submission ── */
                 <div className="bg-red-50 rounded-3xl p-6 shadow-sm border border-red-200">
                     <div className="flex flex-col items-center text-center mb-5">
@@ -270,7 +326,8 @@ export default function TaskManagementPage() {
                         </div>
                         <h3 className="text-xl font-bold text-slate-800 mb-1">Dispute Raised</h3>
                         <p className="text-slate-600 text-sm max-w-sm">
-                            This task is under dispute. As the task poster, you can submit your evidence below. Once you respond, the case moves to Admin review.
+                            This task is under dispute. As the task poster, you can submit your evidence below.
+                            Once you respond, the case moves to Admin review.
                         </p>
                     </div>
 
@@ -289,9 +346,9 @@ export default function TaskManagementPage() {
                                     Your Evidence / Response
                                 </label>
                                 <textarea
-                                    rows={4}
+                                    rows={5}
                                     required
-                                    placeholder="Describe why you are disputing this submission. Include any relevant details…"
+                                    placeholder="Describe your position. Include details that support your case — what was agreed, what was delivered, etc."
                                     value={deptResponse}
                                     onChange={(e) => setDeptResponse(e.target.value)}
                                     className="w-full bg-white border border-red-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-red-300/50 transition-all font-medium text-slate-800 resize-none"
@@ -315,6 +372,72 @@ export default function TaskManagementPage() {
                             </div>
                         </form>
                     )}
+                </div>
+
+            ) : task.status === 'completed' || task.status === 'confirmed' ? (
+                /* ── Task completed (possibly after dispute) ── */
+                <div className={`rounded-3xl p-6 shadow-sm border-2 ${
+                    taskDispute?.resolution_decision === 'student'
+                        ? 'bg-orange-50 border-orange-200'
+                        : 'bg-green-50 border-green-200'
+                }`}>
+                    <div className="flex flex-col items-center text-center gap-3">
+                        <div className={`p-4 rounded-full ${
+                            taskDispute?.resolution_decision === 'student'
+                                ? 'bg-orange-100 text-orange-500'
+                                : 'bg-green-100 text-green-500'
+                        }`}>
+                            <CheckCircle size={36} />
+                        </div>
+                        {taskDispute?.resolution_decision === 'student' ? (
+                            <>
+                                <h3 className="text-xl font-bold text-orange-800">Dispute Resolved — Student Paid</h3>
+                                <p className="text-sm text-orange-700 max-w-sm leading-relaxed">
+                                    Admin reviewed the dispute and ruled in favour of the student.
+                                    <strong> ₦{Number(task.reward_amount || 0).toLocaleString()} was released to the student&apos;s wallet.</strong>
+                                </p>
+                            </>
+                        ) : (
+                            <>
+                                <h3 className="text-xl font-bold text-green-800">Task Completed</h3>
+                                <p className="text-sm text-green-700 max-w-sm">
+                                    This task has been successfully confirmed and completed.
+                                </p>
+                            </>
+                        )}
+                    </div>
+                </div>
+
+            ) : task.status === 'cancelled' ? (
+                /* ── Task cancelled (possibly after dispute) ── */
+                <div className={`rounded-3xl p-6 shadow-sm border-2 ${
+                    taskDispute?.resolution_decision === 'department'
+                        ? 'bg-emerald-50 border-emerald-200'
+                        : 'bg-slate-50 border-slate-200'
+                }`}>
+                    <div className="flex flex-col items-center text-center gap-3">
+                        <div className={`p-4 rounded-full ${
+                            taskDispute?.resolution_decision === 'department'
+                                ? 'bg-emerald-100 text-emerald-500'
+                                : 'bg-slate-100 text-slate-400'
+                        }`}>
+                            <AlertTriangle size={36} />
+                        </div>
+                        {taskDispute?.resolution_decision === 'department' ? (
+                            <>
+                                <h3 className="text-xl font-bold text-emerald-800">Dispute Resolved — Dept. Favoured ✅</h3>
+                                <p className="text-sm text-emerald-700 max-w-sm leading-relaxed">
+                                    Admin reviewed the dispute and ruled in your favour.
+                                    This task has been cancelled and no payment was made to the student.
+                                </p>
+                            </>
+                        ) : (
+                            <>
+                                <h3 className="text-xl font-bold text-slate-700">Task Cancelled</h3>
+                                <p className="text-sm text-slate-500 max-w-sm">This task has been cancelled.</p>
+                            </>
+                        )}
+                    </div>
                 </div>
 
             ) : (
