@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { PlusCircle, CheckCircle, Clock, Loader2, Bell, Scale, ChevronRight, AlertTriangle } from "lucide-react";
+import { PlusCircle, CheckCircle, Clock, Loader2, Bell, Scale, ChevronRight, AlertTriangle, MessageSquareText } from "lucide-react";
 import Link from "next/link";
 import { getProfile, getDeptTasks, getDisputes } from "@/lib/api";
 
@@ -120,6 +120,22 @@ export default function DepartmentDashboard() {
                                             ? 'Admin ruled in your favour. The task was cancelled — no payment made.'
                                             : `Admin ruled in favour of the student. ₦${Number(rewardAmount).toLocaleString()} was paid out.`}
                                     </p>
+                                    {dispute.admin_notes && (
+                                        <div className={`mt-2 rounded-lg p-2.5 flex gap-2 items-start ${
+                                            deptWon ? 'bg-emerald-100' : 'bg-orange-100'
+                                        }`}>
+                                            <MessageSquareText size={12} className={`flex-shrink-0 mt-0.5 ${deptWon ? 'text-emerald-600' : 'text-orange-500'}`} />
+                                            <div>
+                                                <p className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 ${deptWon ? 'text-emerald-600' : 'text-orange-500'}`}>Admin Notes</p>
+                                                <p className={`text-xs leading-relaxed ${deptWon ? 'text-emerald-800' : 'text-orange-700'}`}>{dispute.admin_notes}</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {dispute.resolved_at && (
+                                        <p className="flex items-center gap-1 text-[10px] text-slate-400 mt-2 font-medium">
+                                            <Clock size={10} /> Resolved: {new Date(dispute.resolved_at).toLocaleString()}
+                                        </p>
+                                    )}
                                 </div>
                                 {taskId && (
                                     <Link

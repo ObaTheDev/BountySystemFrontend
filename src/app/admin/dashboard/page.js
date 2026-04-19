@@ -2,8 +2,8 @@
 import { useEffect, useState } from "react";
 import {
     ArrowLeft, Loader2, Scale, CheckCircle2, ShieldAlert,
-    MessageSquare, ChevronDown, ChevronUp, User, Building,
-    AlertCircle, FileText
+    MessageSquareText, User, Building,
+    AlertCircle, FileText, Clock
 } from "lucide-react";
 import Link from "next/link";
 import { resolveDispute, apiCall, deleteUser, getTaskDetails } from "@/lib/api";
@@ -96,11 +96,16 @@ export default function AdminDisputesPage() {
     useEffect(() => { fetchDisputes(); }, []);
 
     const handleResolve = async (disputeId, decision) => {
+        const notes = (adminNotes[disputeId] || "").trim();
+        if (!notes) {
+            setError("Admin notes are required before resolving a dispute.");
+            return;
+        }
         setActionLoading(`${disputeId}-${decision}`);
         setError("");
         setSuccessMsg("");
         try {
-            await resolveDispute(disputeId, decision, adminNotes[disputeId] || "");
+            await resolveDispute(disputeId, decision, notes);
             const label = decision === "student" ? "student (reward released)" : "department (task cancelled)";
             setSuccessMsg(`Dispute #${disputeId} resolved in favour of ${label}.`);
             fetchDisputes();
@@ -228,42 +233,41 @@ export default function AdminDisputesPage() {
                                         </div>
                                     )}
 
-                                    {/* Admin Notes toggle */}
+                                    {/* Admin Notes — REQUIRED before resolving */}
                                     {!isResolved && (
                                         <>
-                                            <button
-                                                onClick={() => toggleExpand(d.disputeId)}
-                                                className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors"
-                                            >
-                                                <MessageSquare size={14} />
-                                                {isExpanded ? "Hide" : "Add"} Admin Notes
-                                                {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                                            </button>
-
-                                            {isExpanded && (
+                                            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                                                <label className="flex items-center gap-1.5 text-xs font-black text-amber-700 uppercase tracking-wide mb-2">
+                                                    <MessageSquareText size={13} />
+                                                    Admin Notes <span className="text-red-500 ml-0.5">*</span>
+                                                    <span className="font-normal normal-case tracking-normal text-amber-600 ml-1">(required)</span>
+                                                </label>
                                                 <textarea
                                                     rows={3}
-                                                    placeholder="Optional: record your ruling rationale before resolving…"
+                                                    placeholder="Provide detailed reasoning for your ruling. This will be sent to both parties…"
                                                     value={adminNotes[d.disputeId] || ""}
                                                     onChange={(e) => setAdminNotes(prev => ({ ...prev, [d.disputeId]: e.target.value }))}
-                                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-red-300/50 transition-all font-medium text-slate-800 resize-none"
+                                                    className="w-full bg-white border border-amber-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-amber-300/60 transition-all font-medium text-slate-800 resize-none"
                                                 />
-                                            )}
+                                                {!(adminNotes[d.disputeId] || "").trim() && (
+                                                    <p className="text-[10px] text-amber-600 mt-1.5 font-semibold">⚠ You must enter notes before the Resolve buttons will activate.</p>
+                                                )}
+                                            </div>
 
-                                            {/* Resolution buttons */}
+                                            {/* Resolution buttons — disabled until notes are present */}
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                 <button
-                                                    disabled={isAnyLoading}
+                                                    disabled={isAnyLoading || !(adminNotes[d.disputeId] || "").trim()}
                                                     onClick={() => handleResolve(d.disputeId, 'department')}
-                                                    className="flex w-full items-center justify-center gap-2 border-2 border-red-200 bg-red-50 text-red-600 font-bold py-3.5 rounded-2xl transition-all hover:bg-red-500 hover:text-white hover:border-red-500 active:scale-95 disabled:opacity-50"
+                                                    className="flex w-full items-center justify-center gap-2 border-2 border-red-200 bg-red-50 text-red-600 font-bold py-3.5 rounded-2xl transition-all hover:bg-red-500 hover:text-white hover:border-red-500 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
                                                 >
                                                     {isLoadingDept ? <Loader2 size={18} className="animate-spin" /> : "Favour Department"}
                                                 </button>
 
                                                 <button
-                                                    disabled={isAnyLoading}
+                                                    disabled={isAnyLoading || !(adminNotes[d.disputeId] || "").trim()}
                                                     onClick={() => handleResolve(d.disputeId, 'student')}
-                                                    className="flex w-full items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3.5 rounded-2xl transition-all shadow-lg shadow-emerald-500/20 active:scale-95 disabled:opacity-50"
+                                                    className="flex w-full items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3.5 rounded-2xl transition-all shadow-lg shadow-emerald-500/20 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
                                                 >
                                                     {isLoadingStudent ? <Loader2 size={18} className="animate-spin" /> : "Pay Student"}
                                                 </button>
@@ -273,33 +277,49 @@ export default function AdminDisputesPage() {
 
                                     {/* Resolved banner */}
                                     {isResolved && (
-                                        <div className={`rounded-2xl p-4 flex items-start gap-3 border-2 ${
+                                        <div className={`rounded-2xl overflow-hidden border-2 ${
                                             d.resolutionDecision === 'student'
-                                                ? 'bg-emerald-50 border-emerald-200'
-                                                : 'bg-red-50 border-red-200'
+                                                ? 'border-emerald-200'
+                                                : 'border-red-200'
                                         }`}>
-                                            <CheckCircle2 size={22} className={`flex-shrink-0 mt-0.5 ${
-                                                d.resolutionDecision === 'student' ? 'text-emerald-500' : 'text-red-500'
-                                            }`} />
-                                            <div className="flex-1 min-w-0">
-                                                <p className={`text-sm font-black uppercase tracking-wide ${
-                                                    d.resolutionDecision === 'student' ? 'text-emerald-700' : 'text-red-700'
-                                                }`}>
+                                            {/* Verdict header */}
+                                            <div className={`px-4 py-3 flex items-center gap-2 ${
+                                                d.resolutionDecision === 'student' ? 'bg-emerald-500' : 'bg-red-500'
+                                            }`}>
+                                                <CheckCircle2 size={16} className="text-white flex-shrink-0" />
+                                                <p className="text-white font-black text-sm uppercase tracking-wide">
                                                     {d.resolutionDecision === 'student'
                                                         ? '✅ Resolved — Student Paid'
-                                                        : '🚫 Resolved — Task Cancelled (Dept. Favoured)'}
+                                                        : '🚫 Resolved — Dept. Favoured (Task Cancelled)'}
                                                 </p>
-                                                <p className={`text-xs mt-1 leading-relaxed ${
-                                                    d.resolutionDecision === 'student' ? 'text-emerald-600' : 'text-red-500'
+                                            </div>
+                                            {/* Body */}
+                                            <div className={`p-4 flex flex-col gap-2.5 ${
+                                                d.resolutionDecision === 'student' ? 'bg-emerald-50' : 'bg-red-50'
+                                            }`}>
+                                                <p className={`text-xs leading-relaxed font-medium ${
+                                                    d.resolutionDecision === 'student' ? 'text-emerald-700' : 'text-red-600'
                                                 }`}>
                                                     {d.resolutionDecision === 'student'
                                                         ? `₦${Number(d.rewardAmount).toLocaleString()} reward was released to the student's wallet.`
                                                         : 'The task was cancelled. No payment was made to the student.'}
                                                 </p>
                                                 {d.adminNotesSaved && (
-                                                    <p className="text-xs text-slate-500 mt-2 italic border-t border-slate-200 pt-2">
-                                                        Admin note: {d.adminNotesSaved}
-                                                    </p>
+                                                    <div className={`rounded-xl p-3 flex gap-2 items-start ${
+                                                        d.resolutionDecision === 'student' ? 'bg-emerald-100' : 'bg-red-100'
+                                                    }`}>
+                                                        <MessageSquareText size={13} className={`flex-shrink-0 mt-0.5 ${
+                                                            d.resolutionDecision === 'student' ? 'text-emerald-600' : 'text-red-500'
+                                                        }`} />
+                                                        <div>
+                                                            <p className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 ${
+                                                                d.resolutionDecision === 'student' ? 'text-emerald-600' : 'text-red-500'
+                                                            }`}>Admin Ruling Notes</p>
+                                                            <p className={`text-xs leading-relaxed ${
+                                                                d.resolutionDecision === 'student' ? 'text-emerald-800' : 'text-red-700'
+                                                            }`}>{d.adminNotesSaved}</p>
+                                                        </div>
+                                                    </div>
                                                 )}
                                             </div>
                                         </div>

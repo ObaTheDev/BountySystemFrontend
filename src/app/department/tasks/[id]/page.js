@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import {
     ArrowLeft, User, Calendar, CheckSquare, Loader2,
     AlertTriangle, CheckCircle, Phone, Hash,
-    GraduationCap, MessageSquare, Send, FileText
+    GraduationCap, MessageSquare, Send, FileText, MessageSquareText
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -396,6 +396,15 @@ export default function TaskManagementPage() {
                                     Admin reviewed the dispute and ruled in favour of the student.
                                     <strong> ₦{Number(task.reward_amount || 0).toLocaleString()} was released to the student&apos;s wallet.</strong>
                                 </p>
+                                {taskDispute.admin_notes && (
+                                    <div className="bg-orange-100 rounded-xl p-3 flex gap-2 items-start text-left w-full mt-2">
+                                        <MessageSquareText size={13} className="flex-shrink-0 mt-0.5 text-orange-600" />
+                                        <div>
+                                            <p className="text-[10px] font-bold uppercase tracking-wider text-orange-600 mb-0.5">Admin Notes</p>
+                                            <p className="text-xs text-orange-800 leading-relaxed">{taskDispute.admin_notes}</p>
+                                        </div>
+                                    </div>
+                                )}
                             </>
                         ) : (
                             <>
@@ -430,6 +439,15 @@ export default function TaskManagementPage() {
                                     Admin reviewed the dispute and ruled in your favour.
                                     This task has been cancelled and no payment was made to the student.
                                 </p>
+                                {taskDispute.admin_notes && (
+                                    <div className="bg-emerald-100 rounded-xl p-3 flex gap-2 items-start text-left w-full mt-2">
+                                        <MessageSquareText size={13} className="flex-shrink-0 mt-0.5 text-emerald-600" />
+                                        <div>
+                                            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 mb-0.5">Admin Notes</p>
+                                            <p className="text-xs text-emerald-800 leading-relaxed">{taskDispute.admin_notes}</p>
+                                        </div>
+                                    </div>
+                                )}
                             </>
                         ) : (
                             <>

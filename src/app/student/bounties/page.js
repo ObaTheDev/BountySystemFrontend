@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Briefcase, CalendarClock, CheckCircle, Loader2, FileText, Send, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Briefcase, CalendarClock, CheckCircle, Loader2, FileText, Send, AlertTriangle, MessageSquareText } from "lucide-react";
 import Link from "next/link";
 import { submitTask, getStudentAssignments, raiseDispute, getDisputes } from "@/lib/api";
 
@@ -110,23 +110,42 @@ export default function MyBountiesPage() {
             <div className="flex flex-col gap-4">
                 {assignments.length > 0 ? (
                     assignments.map((assignment) => {
-                        const task = assignment.task_details || {};
-                        const displayStatus = assignment.status;
-                        const isFormOpen = showFormFor === task.id;
-                        const isSubmitting = submittingId === task.id;
-                        const canSubmit = displayStatus === 'in_progress' || displayStatus === 'accepted';
-                        const isPending = displayStatus === 'submitted' || displayStatus === 'pending_confirmation';
-                        const isDisputed = displayStatus === 'disputed';
-                        const isDone = displayStatus === 'completed' || displayStatus === 'confirmed';
-                        const isCancelled = displayStatus === 'cancelled';
+                        const task = assignment.task_details || assignment.task || {};
+                        
+                        const getSafeId = (obj) => {
+                            if (!obj) return null;
+                            if (typeof obj === 'number' || typeof obj === 'string') return obj;
+                            return obj.id || obj.pk || null;
+                        };
+                        
+                        const taskId = getSafeId(assignment.task_details) || getSafeId(assignment.task) || assignment.task_id;
 
                         // Find the resolved dispute for this task (if any)
+                        // Also try to find it directly on the assignment if the backend nested it there
                         const resolvedDispute = disputes.find(d => {
-                            const dispTaskId = d.task_details?.id ?? d.task_id ?? d.task;
-                            return String(dispTaskId) === String(task.id) && d.status === 'resolved';
-                        });
+                            const dTaskId = getSafeId(d.task_details) || getSafeId(d.task) || d.task_id;
+                            return String(dTaskId) === String(taskId) && d.status === 'resolved';
+                        }) || (assignment.dispute && String(assignment.dispute.status).toLowerCase() === 'resolved' ? assignment.dispute : null)
+                           || (assignment.dispute_details && String(assignment.dispute_details.status).toLowerCase() === 'resolved' ? assignment.dispute_details : null);
                         const studentWon = resolvedDispute?.resolution_decision === 'student';
                         const deptWon = resolvedDispute?.resolution_decision === 'department';
+
+                        // IMPORTANT OVERRIDE: If the base task has progressed past the assignment status
+                        let displayStatus = task.status && (task.status === 'completed' || task.status === 'cancelled') 
+                            ? task.status 
+                            : assignment.status;
+
+                        if (resolvedDispute) {
+                            displayStatus = studentWon ? "completed" : "cancelled";
+                        }
+
+                        const isFormOpen = showFormFor === taskId;
+                        const isSubmitting = submittingId === taskId;
+                        const canSubmit = displayStatus === 'in_progress' || displayStatus === 'accepted';
+                        const isPending = displayStatus === 'submitted' || displayStatus === 'pending_confirmation';
+                        const isDisputed = displayStatus === 'disputed' || displayStatus === 'in_review';
+                        const isDone = displayStatus === 'completed' || displayStatus === 'confirmed';
+                        const isCancelled = displayStatus === 'cancelled';
 
                         return (
                             <div key={assignment.id} className="bg-white rounded-[2rem] p-5 shadow-sm border border-slate-100 relative overflow-hidden">
@@ -183,26 +202,48 @@ export default function MyBountiesPage() {
 
                                     {/* Dispute resolved — student won */}
                                     {isDone && resolvedDispute && studentWon && (
-                                        <div className="mt-4 bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-4 flex items-start gap-3">
-                                            <CheckCircle size={20} className="text-emerald-500 flex-shrink-0 mt-0.5" />
-                                            <div>
-                                                <p className="text-sm font-black text-emerald-700 uppercase tracking-wide">Dispute Resolved — You Won! 🎉</p>
-                                                <p className="text-xs text-emerald-600 mt-1 leading-relaxed">
+                                        <div className="mt-4 bg-emerald-50 border-2 border-emerald-200 rounded-2xl overflow-hidden">
+                                            <div className="bg-emerald-500 px-4 py-2.5 flex items-center gap-2">
+                                                <CheckCircle size={16} className="text-white flex-shrink-0" />
+                                                <p className="text-white font-black text-sm uppercase tracking-wide">Dispute Resolved — You Won! 🎉</p>
+                                            </div>
+                                            <div className="p-4 flex flex-col gap-2.5">
+                                                <p className="text-xs text-emerald-700 font-medium leading-relaxed">
                                                     Admin ruled in your favour. ₦{Number(task.reward_amount || 0).toLocaleString()} has been credited to your wallet.
                                                 </p>
+                                                {resolvedDispute.admin_notes && (
+                                                    <div className="bg-emerald-100 rounded-xl p-3 flex gap-2 items-start">
+                                                        <MessageSquareText size={13} className="flex-shrink-0 mt-0.5 text-emerald-600" />
+                                                        <div>
+                                                            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 mb-0.5">Admin Notes</p>
+                                                            <p className="text-xs text-emerald-800 leading-relaxed">{resolvedDispute.admin_notes}</p>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     )}
 
                                     {/* Dispute resolved — department won (task cancelled) */}
                                     {isCancelled && resolvedDispute && deptWon && (
-                                        <div className="mt-4 bg-slate-100 border-2 border-slate-200 rounded-2xl p-4 flex items-start gap-3">
-                                            <AlertTriangle size={20} className="text-slate-500 flex-shrink-0 mt-0.5" />
-                                            <div>
-                                                <p className="text-sm font-black text-slate-700 uppercase tracking-wide">Dispute Resolved — Dept. Favoured</p>
-                                                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                                        <div className="mt-4 bg-slate-100 border-2 border-slate-200 rounded-2xl overflow-hidden">
+                                            <div className="bg-slate-500 px-4 py-2.5 flex items-center gap-2">
+                                                <AlertTriangle size={16} className="text-white flex-shrink-0" />
+                                                <p className="text-white font-black text-sm uppercase tracking-wide">Dispute Resolved — Dept. Favoured</p>
+                                            </div>
+                                            <div className="p-4 flex flex-col gap-2.5">
+                                                <p className="text-xs text-slate-600 font-medium leading-relaxed">
                                                     Admin reviewed the case and ruled in favour of the department. This task has been cancelled.
                                                 </p>
+                                                {resolvedDispute.admin_notes && (
+                                                    <div className="bg-slate-200 rounded-xl p-3 flex gap-2 items-start">
+                                                        <MessageSquareText size={13} className="flex-shrink-0 mt-0.5 text-slate-500" />
+                                                        <div>
+                                                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">Admin Notes</p>
+                                                            <p className="text-xs text-slate-700 leading-relaxed">{resolvedDispute.admin_notes}</p>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     )}
@@ -218,7 +259,7 @@ export default function MyBountiesPage() {
                                     {/* Submit Work button */}
                                     {canSubmit && !isFormOpen && (
                                         <button
-                                            onClick={() => openForm(task.id)}
+                                            onClick={() => openForm(taskId)}
                                             className="w-full flex justify-center items-center gap-2 mt-4 bg-primary hover:bg-primary-hover text-white font-bold py-3.5 rounded-xl transition-all active:scale-[0.98]">
                                             <Send size={16} /> Submit Work for Review
                                         </button>
@@ -244,7 +285,7 @@ export default function MyBountiesPage() {
                                                     Cancel
                                                 </button>
                                                 <button
-                                                    onClick={() => handleSubmit(task.id)}
+                                                    onClick={() => handleSubmit(taskId)}
                                                     disabled={isSubmitting}
                                                     className="flex-[2] flex justify-center items-center gap-2 bg-primary hover:bg-primary-hover text-white font-bold py-3 rounded-xl transition-all active:scale-[0.98] disabled:opacity-70">
                                                     {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : <><Send size={16} /> Submit for Review</>}
@@ -259,7 +300,7 @@ export default function MyBountiesPage() {
                                                 Waiting for Department to Confirm
                                             </div>
                                             <button
-                                                onClick={() => handleRaiseDispute(task.id)}
+                                                onClick={() => handleRaiseDispute(taskId)}
                                                 className="flex items-center justify-center gap-1.5 border border-red-200 text-red-500 font-bold py-3 px-5 rounded-xl hover:bg-red-50 transition-all text-sm">
                                                 <AlertTriangle size={14} /> Dispute
                                             </button>

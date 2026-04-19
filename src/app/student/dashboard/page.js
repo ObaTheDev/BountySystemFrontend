@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Search, Award, HelpCircle, Loader2, Bell, Scale, ChevronRight, CheckCircle, AlertTriangle } from "lucide-react";
+import { Search, Award, HelpCircle, Loader2, Bell, Scale, ChevronRight, CheckCircle, AlertTriangle, MessageSquareText, Clock } from "lucide-react";
 import Link from "next/link";
 import { getStudentDashboard, getDisputes } from "@/lib/api";
 
@@ -81,8 +81,7 @@ export default function DashboardPage() {
                     {resolvedDisputes.map((dispute) => {
                         const studentWon = dispute.resolution_decision === "student";
                         const taskDetails = dispute.task_details || dispute.task || {};
-                        const taskId = taskDetails.id || dispute.task_id ||
-                            (typeof dispute.task === "number" ? dispute.task : null);
+                        const taskId = taskDetails.id || dispute.task_id || dispute.task;
                         const taskTitle = dispute.task_title || taskDetails.title || "Task";
                         const rewardAmount = taskDetails.reward_amount || dispute.reward_amount || 0;
 
@@ -121,6 +120,22 @@ export default function DashboardPage() {
                                             ? `Admin ruled in your favour. ₦${Number(rewardAmount).toLocaleString()} has been credited to your wallet.`
                                             : "Admin reviewed the case and ruled in favour of the department. This task was cancelled."}
                                     </p>
+                                    {dispute.admin_notes && (
+                                        <div className={`mt-2 rounded-lg p-2.5 flex gap-2 items-start ${
+                                            studentWon ? "bg-emerald-100" : "bg-slate-200"
+                                        }`}>
+                                            <MessageSquareText size={12} className={`flex-shrink-0 mt-0.5 ${studentWon ? "text-emerald-600" : "text-slate-500"}`} />
+                                            <div>
+                                                <p className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 ${studentWon ? "text-emerald-600" : "text-slate-500"}`}>Admin Notes</p>
+                                                <p className={`text-xs leading-relaxed ${studentWon ? "text-emerald-800" : "text-slate-600"}`}>{dispute.admin_notes}</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {dispute.resolved_at && (
+                                        <p className="flex items-center gap-1 text-[10px] text-slate-400 mt-2 font-medium">
+                                            <Clock size={10} /> Resolved: {new Date(dispute.resolved_at).toLocaleString()}
+                                        </p>
+                                    )}
                                 </div>
 
                                 {taskId && (
